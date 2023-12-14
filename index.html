@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en-US">
+	<head>
+		<meta charset="utf-8"/>
+		<title>View LibreView CSV</title>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/11.2.0/highcharts.min.js" integrity="sha512-tHzZoae1WWVxfR83z5kgeGe4UzCZ5T+injJnxDgUl3uFhH+H5ynG7MYTwnebpO1b6YrlqVCSf7eLGPymA9v89Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/11.2.0/modules/accessibility.min.js" integrity="sha512-7JGH2EAWh0D3cVYx9fZqDRVoTsLS0Uu8gaeZ9LmRHHBc4D9KAgJZfE4/Xw1uRulvUszmnEl5six40IaA95NkUw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/11.2.0/modules/stock.min.js" integrity="sha512-tW7sZf2Q0jDBsLh370n3PbGnoQvdUt9leHj4V5gHY6hjQ2oSmfxy0jUOuIRnOjIptIOhczmKrVW2IVEAYrZq0g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<style>
+			#fileInput {
+				display: none;
+			}
+			#fileInput:is(:focus, :focus-within) + label {
+				outline: thin dotted;
+			}
+			#fileInput + label {
+				padding: 10px;
+				display: inline-block;
+				background-color: navy;
+				color: white;
+				border-radius: 5px;
+			}
+			#fileInput + label:hover {
+				box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.2);
+			}
+			.steps-item {
+				border: 1px dotted;
+				margin: 10px;
+				padding: 10px;
+				width: 310px;
+			}
+			#chartContainer {
+				min-width: 310px;
+				height: 400px;
+			}
+			img {
+				margin-top: 5px;
+				width: 300px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="noFileContainer">
+			<h1>View LibreView CSV</h1>
+			<div class="steps-item">
+				Go to <a href="https://www.libreview.com" target="_blank">LibreView.com</a>
+			</div>
+			<div class="steps-item">
+				<div>Make sure the <i>Date Format</i> is set to <code>Year-Month-Day</code> and <i>Time Format</i> is set to <code>24-hour</code> in <i>Account Settings</i></div>
+				<img src="img/preferences.png">
+			</div>
+			<div class="steps-item">
+				<div>Download glucose data CSV file</div>
+				<img src="img/download.png">
+			</div>
+			<div class="steps-item">
+				<input id="fileInput" accept="text/csv" type="file"/>
+				<label for="fileInput">Open file</label>
+				<label id="errorsLabel"></label>
+			</div>
+		</div>
+
+		<div id="fileContainer">
+			<div id="chartContainer" style="min-width: 310px;height: 400px;"></div>
+		</div>
+
+		<script>
+			// 0 "Device"
+			// 1 "Serial Number"
+			// 2 "Device Timestamp"
+			// 3 "Record Type"
+			// 4 "Historic Glucose mmol/L"
+			// 5 "Scan Glucose mmol/L"
+			// 6 "Non-numeric Rapid-Acting Insulin"
+			// 7 "Rapid-Acting Insulin (units)"
+			// 8 "Non-numeric Food"
+			// 9 "Carbohydrates (grams)"
+			// 10 "Carbohydrates (servings)"
+			// 11 "Non-numeric Long-Acting Insulin"
+			// 12 "Long-Acting Insulin Value (units)"
+			// 13 "Notes"
+			// 14 "Strip Glucose mmol/L"
+			// 15 "Ketone mmol/L"
+			// 16 "Meal Insulin (units)"
+			// 17 "Correction Insulin (units)"
+			// 18 "User Change Insulin (units)"
+			const fileContainer = document.getElementById('fileContainer');
+			fileContainer.hidden = true;
+			const noFileContainer = document.getElementById('noFileContainer');
+			const fileInput = document.getElementById('fileInput');
+			const errorsLabel = document.getElementById('errorsLabel');
+			var chart;
+			const columns = [9, 7, 12, 13];
+			const column_colors = {9: 'navy', 7: 'green', 12: 'teal', 13: 'silver'};
+
+			loadText = (csvText) => {
+				const content = csvText.split('\n').map((x) => x.trim());
+				const meta = content.shift();
+				const data = Papa.parse(content.join('\n'), {
+					header: false,
+					dynamicTyping: true,
+					skipEmptyLines: true
+				});
+
+				if (data.errors && data.errors.length) {
+					errorsLabel.innerText = data.errors[0].message;
+					return;
+				}
+
+				fileContainer.hidden = false;
+				noFileContainer.hidden = true;
+
+				var rows = data.data;
+				const headers = rows.shift();
+				rows = rows.filter((row) => columns.concat(4).some((column) => row[column]));
+
+				const flags = rows.filter(
+					(row) => columns.some((column) => row[column])
+				).map((row) => {
+					const column = columns.find((c) => row[c]);
+					return {
+						x: Date.parse(row[2]),
+						title: column === 13 ? '...' : row[column],
+						text: `${headers[column]}: ${row[column]}`,
+						fillColor: column_colors[column]
+					}
+				});
+				flags.sort((a, b) => a.x > b.x ? 1 : a.x === b.x ? 0 : -1);
+
+				const series = [
+					{
+						name: headers[4],
+						data: rows.filter((item) => item[4]).map((item) => [
+							Date.parse(item[2]), item[4]
+						]),
+						id: 'dataseries',
+						tooltip: {valueDecimals: 1},
+						turboThreshold: 0
+					},
+					{
+						type: 'flags',
+						shape: 'circlepin',
+						width: 16,
+						onSeries: 'dataseries',
+						stackDistance: 20,
+						data: flags,
+						style: {color: 'white'}
+					}
+				];
+
+				if (chart) chart.destroy();
+
+				chart = Highcharts.stockChart('chartContainer', {
+					rangeSelector: {
+						buttons: [
+							{type: 'week', count: 1, text: '1w'},
+							{type: 'day', count: 1, text: '1d'},
+							{type: 'hour', count: 12, text: '12h'},
+							{type: 'hour', count: 1, text: '1h'}
+						],
+						selected: 1,
+						inputDateFormat: '%Y-%m-%d %H:%M',
+						inputEditDateFormat: '%Y-%m-%d %H:%M'
+					},
+					tooltip: {split: false, shared: true},
+					title: {text: meta.split(',').join(' ')},
+					yAxis: [{
+						title: {text: headers[4]},
+						labels: {align: 'left', x: 3},
+						lineWidth: 2,
+						softMin: 0,
+						softMax: 23,
+						tickInterval: 3,
+						plotBands: [{from: 3.9, to: 10}]
+					}],
+					series: series,
+					plotOptions: {series: {states: {inactive: {opacity: 1}}}},
+					time: {useUTC: false}
+				});
+			}
+
+			fileInput.addEventListener('change', () => {
+				const reader = new FileReader();
+				reader.onload = (evt) => {
+					loadText(evt.target.result);
+				}
+				reader.readAsText(fileInput.files[0]);
+			})
+		</script>
+	</body>
+</html>
