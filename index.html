@@ -99,7 +99,6 @@
 				const meta = content.shift();
 				const data = Papa.parse(content.join('\n'), {
 					header: false,
-					dynamicTyping: true,
 					skipEmptyLines: true
 				});
 
@@ -128,12 +127,14 @@
 				});
 				flags.sort((a, b) => a.x > b.x ? 1 : a.x === b.x ? 0 : -1);
 
+				const series_data = rows.filter((item) => item[4]).map((item) => [
+					Date.parse(item[2]), parseFloat(item[4].replaceAll(',', '.'))
+				]).sort((a, b) => a[0] > b[0] ? 1 : a[0] === b[0] ? 0 : -1);
+
 				const series = [
 					{
 						name: headers[4],
-						data: rows.filter((item) => item[4]).map((item) => [
-							Date.parse(item[2]), item[4]
-						]),
+						data: series_data,
 						id: 'dataseries',
 						tooltip: {valueDecimals: 1},
 						turboThreshold: 0
